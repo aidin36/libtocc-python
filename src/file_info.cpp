@@ -55,8 +55,11 @@ static int file_info_init(FileInfoObject* self, PyObject* args, PyObject* kwargs
  */
 static void file_info_object_dealloc(FileInfoObject* self)
 {
-  delete self->file_info_instance;
-  self->file_info_instance = NULL;
+  if (self->file_info_instance != NULL)
+  {
+    delete self->file_info_instance;
+    self->file_info_instance = NULL;
+  }
   PyObject_Del(self);
 }
 
@@ -175,7 +178,8 @@ static PyTypeObject FileInfoType =
   0,
   0,
   Py_TPFLAGS_DEFAULT,
-  0,
+  PyDoc_STR("Keeps information of a file.\n"
+            "You shouldn't create an instance of this class directly."),
   0,
   0,
   0,
