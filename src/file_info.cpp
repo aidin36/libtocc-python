@@ -1,4 +1,3 @@
-
 /*
  * This file is part of libtocc-python. A Python wrapper for libtocc.
  * (see <http://www.github.com/aidin36/libtocc-python>)
@@ -18,6 +17,8 @@
  * along with libtocc-python.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+
+#define FILE_INFO_MODULE
 #include "file_info.h"
 
 /*
@@ -216,33 +217,6 @@ static struct PyModuleDef file_info_module = {
 };
 
 /*
- * Module initialization func.
- */
-extern "C"
-PyMODINIT_FUNC PyInit_file_info(void)
-{
-  PyObject* module = NULL;
-
-  FileInfoType.tp_new = PyType_GenericNew;
-  if (PyType_Ready(&FileInfoType) < 0)
-  {
-    Py_XDECREF(module);
-    return NULL;
-  }
-
-  module = PyModule_Create(&file_info_module);
-  if (module == NULL)
-  {
-    Py_XDECREF(module);
-    return NULL;
-  }
-
-  PyModule_AddObject(module, "FileInfo", (PyObject*)&FileInfoType);
-
-  return module;
-}
-
-/*
  * Creates a Python Object from the specified FileInfo.
  */
 PyObject* create_python_file_info(const libtocc::FileInfo& file_info)
@@ -262,7 +236,7 @@ PyObject* create_python_file_info(const libtocc::FileInfo& file_info)
 /*
  * Creates a list of Python objects from the specified FileInfoCollection.
  */
-PyObject* crate_python_file_info_list(
+PyObject* create_python_file_info_list(
     libtocc::FileInfoCollection& file_info_collection)
 {
   if (file_info_collection.size() == 0)
@@ -287,4 +261,48 @@ PyObject* crate_python_file_info_list(
 
   Py_DECREF(file_info_list);
   return file_info_list;
+}
+
+/*
+ * Module initialization func.
+ */
+extern "C"
+PyMODINIT_FUNC PyInit_file_info(void)
+{
+  PyObject* module = NULL;
+  static void* FileInfoAPI[FILE_INFO_API_POINTERS];
+  PyObject* c_api_object;
+
+  // Creating module.
+  FileInfoType.tp_new = PyType_GenericNew;
+  if (PyType_Ready(&FileInfoType) < 0)
+  {
+    Py_XDECREF(module);
+    return NULL;
+  }
+
+  // Creating FileInfo type and adding it to module.
+  module = PyModule_Create(&file_info_module);
+  if (module == NULL)
+  {
+    Py_XDECREF(module);
+    return NULL;
+  }
+
+  PyModule_AddObject(module, "FileInfo", (PyObject*)&FileInfoType);
+
+  // Creating C API and adding it to module.
+
+  // API funcs.
+  FileInfoAPI[FILE_INFO_CREATE_NUM] = (void*)create_python_file_info;
+  FileInfoAPI[FILE_INFO_COLLECTION_CREATE_NUM] = (void*)create_python_file_info_list;
+
+  // Capsule object.
+  c_api_object = PyCapsule_New((void*)FileInfoAPI, "file_info._C_API", NULL);
+  if (c_api_object != NULL)
+  {
+    PyModule_AddObject(module, "_C_API", c_api_object);
+  }
+
+  return module;
 }

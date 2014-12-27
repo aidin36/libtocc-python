@@ -22,6 +22,9 @@ extern "C"
 #include <Python.h>
 }
 
+// `file_info' module.
+#include "file_info.h"
+
 #include <libtocc/front_end/manager.h>
 
 
@@ -165,6 +168,13 @@ PyMODINIT_FUNC PyInit_manager(void)
   }
 
   PyModule_AddObject(module, "Manager", (PyObject*)&ManagerType);
+
+  // Importing C API of `file_info' module.
+  if (import_file_info() < 0)
+  {
+    Py_XDECREF(module);
+    return NULL;
+  }
 
   return module;
 }

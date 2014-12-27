@@ -1,4 +1,3 @@
-
 /*
  * This file is part of libtocc-python. A Python wrapper for libtocc.
  * (see <http://www.github.com/aidin36/libtocc-python>)
@@ -21,6 +20,10 @@
 #ifndef LIBTOCC_PYTHON_FILE_INFO_H_INCLUDED
 #define LIBTOCC_PYTHON_FILE_INFO_H_INCLUDED
 
+/*
+ * Header file for `file_info' module.
+ */
+
 extern "C"
 {
 #include "Python.h"
@@ -29,18 +32,47 @@ extern "C"
 #include <libtocc/front_end/file_info.h>
 
 
-namespace libtocc_python
-{
-  /*
-   * Creates a Python Object from the specified FileInfo.
-   */
-  PyObject* create_python_file_info(const libtocc::FileInfo& file_info);
+#define FILE_INFO_CREATE_NUM 0
+#define FILE_INFO_COLLECTION_CREATE_NUM 1
+#define FILE_INFO_API_POINTERS 2
 
-  /*
-   * Creates a list of Python objects from the specified FileInfoCollection.
-   */
-  PyObject* crate_python_file_info_list(
+#ifdef FILE_INFO_MODULE
+
+// This section is used when compiling file_info.cpp
+static PyObject* create_python_file_info(const libtocc::FileInfo& file_info);
+PyObject* create_python_file_info_list(
       libtocc::FileInfoCollection& file_info_collection);
+
+#else
+
+// This section is used when someone else uses this module's API.
+extern "C"
+{
+static void** FileInfoAPI;
 }
+
+#define create_python_file_info \
+  (*(PyObject*) (*)(const libtocc::FileInfo& file_info) FileInfoAPI[FILE_INFO_CREATE_NUM])
+#define create_python_file_info_list \
+  (*(PyObject*) (*)(libtocc::FileInfoCollection& file_info_collection) FileInfoAPI[FILE_INFO_COLLECTION_CREATE_NUM])
+
+extern "C"
+{
+/*
+ * Returns 0 on success, -1 on error.
+ * It will set an exception if there was error.
+ */
+static int import_file_info(void)
+{
+  FileInfoAPI = (void**)PyCapsule_Import("file_info._C_API", 0);
+  if (FileInfoAPI == NULL)
+  {
+    return -1;
+  }
+  return 0;
+}
+}
+
+#endif /* FILE_INFO_MODULE */
 
 #endif /* LIBTOCC_PYTHON_FILE_INFO_H_INCLUDED */
