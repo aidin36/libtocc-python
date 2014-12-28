@@ -52,9 +52,9 @@ static void** FileInfoAPI;
 }
 
 #define create_python_file_info \
-  (*(PyObject*) (*)(const libtocc::FileInfo& file_info) FileInfoAPI[FILE_INFO_CREATE_NUM])
+  (*(PyObject* (*)(const libtocc::FileInfo& file_info)) FileInfoAPI[FILE_INFO_CREATE_NUM])
 #define create_python_file_info_list \
-  (*(PyObject*) (*)(libtocc::FileInfoCollection& file_info_collection) FileInfoAPI[FILE_INFO_COLLECTION_CREATE_NUM])
+  (*(PyObject* (*)(libtocc::FileInfoCollection& file_info_collection)) FileInfoAPI[FILE_INFO_COLLECTION_CREATE_NUM])
 
 extern "C"
 {

@@ -22,10 +22,12 @@ extern "C"
 #include <Python.h>
 }
 
+#include "utilities.h"
 // `file_info' module.
 #include "file_info.h"
 
 #include <libtocc/front_end/manager.h>
+#include <libtocc/common/base_exception.h>
 
 
 /*
@@ -72,11 +74,188 @@ static void manager_object_dealloc(ManagerObject* self)
   PyObject_Del(self);
 }
 
+static PyObject* manager_initialize(ManagerObject* self)
+{
+  try
+  {
+    self->manager_instance->initialize();
+    Py_RETURN_NONE;
+  }
+  catch (libtocc::BaseException& error)
+  {
+    // TODO
+    return NULL;
+  }
+}
+
+static PyObject* manager_get_file_info(ManagerObject* self, PyObject* args)
+{
+  char* file_id;
+
+  if (!PyArg_ParseTuple(args, "s", &file_id))
+  {
+    return NULL;
+  }
+
+  try
+  {
+    return create_python_file_info(self->manager_instance->get_file_info(file_id));
+  }
+  catch (libtocc::BaseException& error)
+  {
+    // TODO
+    return NULL;
+  }
+}
+
+static PyObject* manager_get_file_by_traditional_path(ManagerObject* self, PyObject* args)
+{
+  char* traditional_path;
+
+  if (!PyArg_ParseTuple(args, "s", &traditional_path))
+  {
+    return NULL;
+  }
+
+  try
+  {
+    return create_python_file_info(
+        self->manager_instance->get_file_by_traditional_path(traditional_path));
+  }
+  catch (libtocc::BaseException& error)
+  {
+    // TODO
+    return NULL;
+  }
+}
+
+static PyObject* manager_import_file(ManagerObject* self, PyObject* args, PyObject* kwargs)
+{
+  char* source_path;
+  char* title;
+  char* traditional_path;
+  PyObject* tags_list;
+
+  static char* kwlist[] = { "source_path", "title", "traditional_path",
+                             "tags", NULL };
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs,
+                                   "s|ssO",
+                                   kwlist,
+                                   &source_path,
+                                   &title,
+                                   &traditional_path,
+                                   &tags_list))
+  {
+    return NULL;
+  }
+
+  libtocc_python::PyObjectHolder(tags_list, true);
+
+  try
+  {
+    if (tags_list == Py_None)
+    {
+      // Using the other overload without tags.
+      libtocc::FileInfo result =
+          self->manager_instance->import_file(source_path, title, traditional_path);
+      return create_python_file_info(result);
+    }
+    else
+    {
+      if (!PyList_Check(tags_list))
+      {
+        // TODO: Raise exception.
+      }
+
+      // Creating a tags collection from the list of tags.
+      int tags_size = PyList_Size(tags_list);
+      libtocc::TagsCollection tags_collection(tags_size);
+      for (int i = 0; i < tags_size; i++)
+      {
+        PyObject* tag_bytes = PyUnicode_AsEncodedString(
+                                PyList_GetItem(tags_list, i),
+                                "utf-8",
+                                "Could not encode tag, in import method.");
+        if (tag_bytes == NULL)
+        {
+          return NULL;
+        }
+        libtocc_python::PyObjectHolder tag_bytes_holder(tag_bytes);
+
+        char* tag_str = PyBytes_AsString(tag_bytes);
+        if (tag_str == NULL)
+        {
+          return NULL;
+        }
+        tags_collection.add_tag(tag_str);
+      }
+
+      // Importing file.
+      libtocc::FileInfo result =
+          self->manager_instance->import_file(source_path, title,
+                                              traditional_path,
+                                              &tags_collection);
+      return create_python_file_info(result);
+    }
+  }
+  catch (libtocc::BaseException& error)
+  {
+    // TODO
+  }
+}
+
 /*
  * Methods of Manager class.
  */
 static PyMethodDef manager_methods[] =
 {
+    {
+      "initialize", (PyCFunction)manager_initialize, METH_NOARGS,
+      PyDoc_STR("Initializes the specified base path.\n"
+                "This method should be called once in a new base path. Or else, you\n"
+                "can't work with that path.\n"
+                "Note that this method should be called once for every path.\n"
+                "\n"
+                "@raise DatabaseInitializationError: If path was already initialized,\n"
+                 "  or there was something wrong with the path.")
+    },
+    {
+      "get_file_info", (PyCFunction)manager_get_file_info, METH_VARARGS,
+      PyDoc_STR("Gets information of a file.\n"
+                "\n"
+                "@param file_id: (str) ID of the file to get.\n"
+                "\n"
+                "@return: FileInfo\n"
+                "\n"
+                "@throw DatabaseScriptLogicalError: if file not found.\n")
+    },
+    {
+      "get_file_by_traditional_path", (PyCFunction)manager_get_file_by_traditional_path, METH_VARARGS,
+      PyDoc_STR("Gets information of the file, that its traditional_path matches\n"
+                "with the specified one.\n"
+                "\n"
+                "@param traditional_path: Path of the file to get.\n"
+                "\n"
+                "@return: Information of the file.\n"
+                "\n"
+                "@throw DatabaseScriptLogicalError: if file not found.")
+    },
+    {
+      "import_file", (PyCFunction)manager_import_file, METH_VARARGS | METH_KEYWORDS,
+      PyDoc_STR("Imports a file from the path to the Tocc managed file system.\n"
+                "\n"
+                "@param source_path: (str) Path to the source file.\n"
+                "@keyword title: (str) title of the file.\n"
+                "@keyword traditional_path: (str) traditional path of the file.\n"
+                "  (Can be empty string.)\n"
+                "@keyword tags: (list of str) Tags to assign to the file.\n"
+                "\n"
+                "@note: If you don't want to set title or traditional path,\n"
+                "  pass empty string (""), not None.\n"
+                "\n"
+                "@return: Information of the newly created file.")
+    },
     { NULL, NULL}
 };
 

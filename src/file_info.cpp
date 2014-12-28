@@ -20,6 +20,8 @@
 
 #define FILE_INFO_MODULE
 #include "file_info.h"
+#include "utilities.h"
+
 
 /*
  * Defines a Python class, for the FileInfo.
@@ -109,11 +111,11 @@ static PyObject* file_info_get_tags(FileInfoObject* self)
     return NULL;
   }
 
-  Py_INCREF(tags_list);
+  libtocc_python::PyObjectHolder(tags_list, true);
 
   int list_index = 0;
   libtocc::TagsCollection::Iterator iterator(&tags_collection);
-  for (; iterator.is_finished(); iterator.next())
+  for (; !iterator.is_finished(); iterator.next())
   {
     // I used SET_ITEM instead of SetItem because it's faster for newly
     // created lists.
@@ -121,7 +123,6 @@ static PyObject* file_info_get_tags(FileInfoObject* self)
     list_index++;
   }
 
-  Py_DECREF(tags_list);
   return tags_list;
 }
 
