@@ -25,6 +25,8 @@ extern "C"
 #include <Python.h>
 }
 
+#include <libtocc/front_end/file_info.h>
+
 
 namespace libtocc_python
 {
@@ -53,6 +55,22 @@ namespace libtocc_python
     PyObject* object;
   };
 
+
+  /*
+   * Converts a Python's list of str (list of file IDs) to a collection
+   * of File Infos.
+   * Each element of the collection have only its ID set.
+   *
+   * Note that you should delete the return pointer when you finished with it.
+   */
+  libtocc::FileInfoCollection* file_ids_to_info_collection(PyObject* ids_list);
+
+  /*
+   * Converts a Python's list of str (list of Tags) to a collection of Tags.
+   *
+   * Note that you should delete the return pointer when you finished with it.
+   */
+  libtocc::TagsCollection* tags_list_to_collection(PyObject* tags_list);
 }
 
 #endif /* LIBTOCC_PYTHON_UTILITIES_H_INCLUDED */

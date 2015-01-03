@@ -152,6 +152,8 @@ static PyObject* manager_import_file(ManagerObject* self, PyObject* args, PyObje
 
   libtocc_python::PyObjectHolder(tags_list, true);
 
+  libtocc::TagsCollection* tags_collection = NULL;
+
   try
   {
     if (tags_list == Py_None)
@@ -169,40 +171,190 @@ static PyObject* manager_import_file(ManagerObject* self, PyObject* args, PyObje
       }
 
       // Creating a tags collection from the list of tags.
-      int tags_size = PyList_Size(tags_list);
-      libtocc::TagsCollection tags_collection(tags_size);
-      for (int i = 0; i < tags_size; i++)
-      {
-        PyObject* tag_bytes = PyUnicode_AsEncodedString(
-                                PyList_GetItem(tags_list, i),
-                                "utf-8",
-                                "Could not encode tag, in import method.");
-        if (tag_bytes == NULL)
-        {
-          return NULL;
-        }
-        libtocc_python::PyObjectHolder tag_bytes_holder(tag_bytes);
-
-        char* tag_str = PyBytes_AsString(tag_bytes);
-        if (tag_str == NULL)
-        {
-          return NULL;
-        }
-        tags_collection.add_tag(tag_str);
-      }
+      tags_collection = libtocc_python::tags_list_to_collection(tags_list);
 
       // Importing file.
       libtocc::FileInfo result =
           self->manager_instance->import_file(source_path, title,
                                               traditional_path,
-                                              &tags_collection);
+                                              tags_collection);
+
+      delete tags_collection;
+      tags_collection = NULL;
+
       return create_python_file_info(result);
     }
   }
   catch (libtocc::BaseException& error)
   {
     // TODO
+    if (tags_collection != NULL)
+    {
+      delete tags_collection;
+    }
   }
+}
+
+static PyObject* manager_remove_file(ManagerObject* self, PyObject* args)
+{
+  char* file_id;
+
+  if (!PyArg_ParseTuple(args, "s", file_id))
+  {
+    return NULL;
+  }
+
+  try
+  {
+    self->manager_instance->remove_file(file_id);
+
+    Py_RETURN_NONE;
+  }
+  catch(libtocc::BaseException& error)
+  {
+    // TODO
+  }
+}
+
+static PyObject* manager_remove_files(ManagerObject* self, PyObject* args)
+{
+  PyObject* files_list;
+
+  if (!PyArg_ParseTuple(args, "O", files_list))
+  {
+    return NULL;
+  }
+
+  if (!PyList_Check(files_list))
+  {
+    // TODO: set exception.
+    return NULL;
+  }
+
+  libtocc::FileInfoCollection* file_infos = NULL;
+
+  try
+  {
+    file_infos = libtocc_python::file_ids_to_info_collection(files_list);
+
+    // Calling manager by the created collection.
+    self->manager_instance->remove_files(*file_infos);
+
+    delete file_infos;
+
+    Py_RETURN_NONE;
+  }
+  catch (libtocc::BaseException& error)
+  {
+    // TODO
+    if (file_infos != NULL)
+    {
+      delete file_infos;
+    }
+
+  }
+}
+
+static PyObject* manager_assign_tags(ManagerObject* self, PyObject* args)
+{
+  PyObject* files_list;
+  PyObject* tags_list;
+
+  if (!PyArg_ParseTuple(args, "OO", files_list, tags_list))
+  {
+    return NULL;
+  }
+
+  if (!PyList_Check(files_list))
+  {
+    // TODO: set exception.
+    return NULL;
+  }
+  if (!PyList_Check(tags_list))
+  {
+    // TODO: set exception.
+    return NULL;
+  }
+
+  libtocc::FileInfoCollection* file_infos;
+  libtocc::TagsCollection* tags;
+
+  try
+  {
+    file_infos = libtocc_python::file_ids_to_info_collection(files_list);
+    tags = libtocc_python::tags_list_to_collection(tags_list);
+
+    self->manager_instance->assign_tags(*file_infos, tags);
+
+    delete file_infos;
+    delete tags;
+
+    Py_RETURN_NONE;
+  }
+  catch (libtocc::BaseException& error)
+  {
+    // TODO
+    if (file_infos != NULL)
+    {
+      delete file_infos;
+    }
+    if (tags != NULL)
+    {
+      delete tags;
+    }
+  }
+
+}
+
+static PyObject* manager_unassign_tags(ManagerObject* self, PyObject* args)
+{
+  PyObject* files_list;
+  PyObject* tags_list;
+
+  if (!PyArg_ParseTuple(args, "OO", files_list, tags_list))
+  {
+    return NULL;
+  }
+
+  if (!PyList_Check(files_list))
+  {
+    // TODO: set exception.
+    return NULL;
+  }
+  if (!PyList_Check(tags_list))
+  {
+    // TODO: set exception.
+    return NULL;
+  }
+
+  libtocc::FileInfoCollection* file_infos;
+  libtocc::TagsCollection* tags;
+
+  try
+  {
+    file_infos = libtocc_python::file_ids_to_info_collection(files_list);
+    tags = libtocc_python::tags_list_to_collection(tags_list);
+
+    self->manager_instance->unassign_tags(*file_infos, tags);
+
+    delete file_infos;
+    delete tags;
+
+    Py_RETURN_NONE;
+  }
+  catch (libtocc::BaseException& error)
+  {
+    // TODO
+    if (file_infos != NULL)
+    {
+      delete file_infos;
+    }
+    if (tags != NULL)
+    {
+      delete tags;
+    }
+  }
+
 }
 
 /*
@@ -252,9 +404,42 @@ static PyMethodDef manager_methods[] =
                 "@keyword tags: (list of str) Tags to assign to the file.\n"
                 "\n"
                 "@note: If you don't want to set title or traditional path,\n"
-                "  pass empty string (""), not None.\n"
+                "  pass empty string (\"\"), not None.\n"
                 "\n"
                 "@return: Information of the newly created file.")
+    },
+    {
+      "remove_file", (PyCFunction)manager_remove_file, METH_VARARGS,
+      PyDoc_STR("Deletes the specified file, both from database and\n"
+                "file system.\n"
+                "\n"
+                "@param file_id: (str) ID of the file to delete.")
+    },
+    {
+      "remove_files", (PyCFunction)manager_remove_files, METH_VARARGS,
+      PyDoc_STR("Deletes a list of files, both from database and\n"
+                "file system.\n"
+                "\n"
+                "@param file_ids: (list of str) IDs of files to delete.")
+    },
+    {
+      "assign_tags", (PyCFunction)manager_assign_tags, METH_VARARGS,
+      PyDoc_STR("Assign list of tags to a list of files.\n"
+                "It assigns all tags to each file.\n"
+                "\n"
+                "@param file_ids: (list of str) IDs of files to assign\n"
+                "  tags to.\n"
+                "@param tags: (list of str) Tags to assign.")
+    },
+    {
+      "unassign_tags", (PyCFunction)manager_unassign_tags, METH_VARARGS,
+      PyDoc_STR("Unassign list of tags from a list of files.\n"
+                "It unassign each tags from all of the files.\n"
+                "Raises exception if specified files not found.\n"
+                "\n"
+                "@param file_ids: (list of str) IDs of files to unassign\n"
+                "  their tags.\n"
+                "@param tags: (list of str) Tags to unassign.")
     },
     { NULL, NULL}
 };
