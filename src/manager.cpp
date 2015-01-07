@@ -132,9 +132,9 @@ static PyObject* manager_get_file_by_traditional_path(ManagerObject* self, PyObj
 static PyObject* manager_import_file(ManagerObject* self, PyObject* args, PyObject* kwargs)
 {
   char* source_path;
-  char* title;
-  char* traditional_path;
-  PyObject* tags_list;
+  char* title = "";
+  char* traditional_path = "";
+  PyObject* tags_list = NULL;
 
   static char* kwlist[] = { "source_path", "title", "traditional_path",
                              "tags", NULL };
@@ -156,7 +156,8 @@ static PyObject* manager_import_file(ManagerObject* self, PyObject* args, PyObje
 
   try
   {
-    if (tags_list == Py_None)
+    if (tags_list == NULL || tags_list == Py_None ||
+        (PyList_Check(tags_list) && PyList_Size(tags_list) <= 0))
     {
       // Using the other overload without tags.
       libtocc::FileInfo result =
@@ -218,6 +219,8 @@ static PyObject* manager_remove_file(ManagerObject* self, PyObject* args)
 
 static PyObject* manager_remove_files(ManagerObject* self, PyObject* args)
 {
+  // Note that files_list is a borrowed reference,
+  // we do not touch its reference count.
   PyObject* files_list;
 
   if (!PyArg_ParseTuple(args, "O", files_list))
@@ -257,6 +260,8 @@ static PyObject* manager_remove_files(ManagerObject* self, PyObject* args)
 
 static PyObject* manager_assign_tags(ManagerObject* self, PyObject* args)
 {
+  // Note that python objects are borrowed reference,
+  // we do not touch its reference count.
   PyObject* files_list;
   PyObject* tags_list;
 
@@ -308,6 +313,8 @@ static PyObject* manager_assign_tags(ManagerObject* self, PyObject* args)
 
 static PyObject* manager_unassign_tags(ManagerObject* self, PyObject* args)
 {
+  // Note that python objects are borrowed reference,
+  // we do not touch its reference count.
   PyObject* files_list;
   PyObject* tags_list;
 
@@ -355,6 +362,143 @@ static PyObject* manager_unassign_tags(ManagerObject* self, PyObject* args)
     }
   }
 
+}
+
+static PyObject* manager_set_title(ManagerObject* self, PyObject* args)
+{
+  // Note that file_ids is a borrowed reference,
+  // we do not touch its reference count.
+  PyObject* file_ids;
+  const char* title;
+
+  if (!PyArg_ParseTuple(args, "Os", file_ids, title))
+  {
+    return NULL;
+  }
+
+  try
+  {
+    if (PyList_Check(file_ids))
+    {
+      char** file_ids_array = NULL;
+      if (!create_file_ids_array(file_ids, file_ids_array))
+      {
+        return NULL;
+      }
+
+      self->manager_instance->set_titles((const char**)file_ids_array, (int)PyList_Size(file_ids), title);
+
+      // TODO: delete this if exception occurred.
+      delete[] file_ids_array;
+      file_ids_array = NULL;
+    }
+    else if (PyUnicode_Check(file_ids))
+    {
+      char* file_id_str = libtocc_python::python_unicode_to_char(file_ids);
+      if (file_id_str == NULL)
+      {
+        return NULL;
+      }
+
+      self->manager_instance->set_title(file_id_str, title);
+    }
+    else
+    {
+      // TODO
+    }
+
+    Py_RETURN_NONE;
+  }
+  catch (libtocc::BaseException& error)
+  {
+    // TODO
+  }
+}
+
+static PyObject* tags_statistics_to_dict(libtocc::TagStatisticsCollection* statistics)
+{
+  PyObject* result = PyDict_New();
+
+  if (statistics->size() <= 0)
+  {
+    // Returning an empty dict.
+    return result;
+  }
+
+  libtocc::TagStatisticsCollection::Iterator iterator(statistics);
+
+  for (; !iterator.is_finished(); iterator.next())
+  {
+    libtocc::TagStatistics item = iterator.get();
+    PyDict_SetItem(result, PyUnicode_FromString(item.get_tag()), PyLong_FromLong(item.get_assigned_files()));
+  }
+
+  return result;
+}
+
+PyObject* manager_get_tags_statistics(ManagerObject* self, PyObject* args, PyObject* kwargs)
+{
+  PyObject* argument = NULL;
+
+  char* kwlist[] = { "files" };
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|O", kwlist, &argument))
+  {
+    return NULL;
+  }
+
+  if (argument == NULL || argument == Py_None ||
+      (PyList_Check(argument) && PyList_Size(argument) <= 0))
+  {
+    // No argument passed.
+    libtocc::TagStatisticsCollection statistics =
+        self->manager_instance->get_tags_statistics();
+    return tags_statistics_to_dict(&statistics);
+  }
+  if (PyUnicode_Check(argument))
+  {
+    // Argument is a single string.
+    libtocc::FileInfo file_info(libtocc_python::python_unicode_to_char(argument));
+    libtocc::FileInfoCollection files_collection;
+    files_collection.add_file_info(file_info);
+
+    libtocc::TagStatisticsCollection statistics =
+        self->manager_instance->get_tags_statistics(files_collection);
+    return tags_statistics_to_dict(&statistics);
+  }
+  if (is_python_file_info(argument))
+  {
+    // Argument is a single file info.
+    libtocc::FileInfo* file_info =
+        python_file_info_get(argument);
+
+    libtocc::FileInfoCollection files_collection;
+    files_collection.add_file_info(*file_info);
+
+    libtocc::TagStatisticsCollection statistics =
+        self->manager_instance->get_tags_statistics(files_collection);
+    return tags_statistics_to_dict(&statistics);
+  }
+  if (PyList_Check(argument))
+  {
+    // Argument is a list of file info or a list of Unicode.
+    char** file_ids_array;
+    if (!create_file_ids_array(argument, file_ids_array))
+    {
+      return NULL;
+    }
+
+    libtocc::TagStatisticsCollection statistics =
+        self->manager_instance->get_tags_statistics((const char**)file_ids_array,
+                                                    PyList_Size(argument));
+    return tags_statistics_to_dict(&statistics);
+  }
+
+  // Wrong type of argument.
+  PyErr_Format(PyExc_TypeError,
+               "Expected a str, FileInfo or list. Found: %s",
+               Py_TYPE(argument)->tp_name);
+  return NULL;
 }
 
 /*
@@ -440,6 +584,27 @@ static PyMethodDef manager_methods[] =
                 "@param file_ids: (list of str) IDs of files to unassign\n"
                 "  their tags.\n"
                 "@param tags: (list of str) Tags to unassign.")
+    },
+    {
+      "set_title", (PyCFunction)manager_set_title, METH_VARARGS,
+      PyDoc_STR("Sets title of a file.\n"
+                "\n"
+                "@param file_id: (str or list) ID of the file to set\n"
+                "  its title. It can be a single ID (str) or a list of\n"
+                "  IDs (list of str).\n"
+                "@param title: (str) Title to set to the file.")
+    },
+    {
+      "get_tags_statistics", (PyCFunction)manager_get_tags_statistics, METH_VARARGS | METH_KEYWORDS,
+      PyDoc_STR("Collects statistics (how many files assigned to each tag)\n"
+                "and returns it.\n"
+                "If no arguments passed, it returns statistics of all files.\n"
+                "You can pass list of files, to get statistics of only those\n"
+                "files.\n"
+                "\n"
+                "@keyword files: Can be a File ID (str), a FileInfo instance,\n"
+                "  or a list of File IDs or FileInfos (or a list of mix of\n"
+                "  them.)")
     },
     { NULL, NULL}
 };

@@ -55,6 +55,12 @@ namespace libtocc_python
     PyObject* object;
   };
 
+  /*
+   * Converts a PyUnicode object to a char*.
+   *
+   * If any error happens, it sets the PyErr and returns NULL.
+   */
+  char* python_unicode_to_char(PyObject* unicode_object);
 
   /*
    * Converts a Python's list of str (list of file IDs) to a collection

@@ -39,6 +39,25 @@ namespace libtocc_python
     Py_XDECREF(this->object);
   }
 
+  char* python_unicode_to_char(PyObject* unicode_object)
+  {
+    PyObject* bytes_object =
+        PyUnicode_AsEncodedString(unicode_object,
+                                  "utf-8",
+                                  "Could not encode the Unicode into UTF-8");
+    if (bytes_object == NULL)
+    {
+      return NULL;
+    }
+
+    libtocc_python::PyObjectHolder bytes_holder(bytes_object);
+
+    char* result = PyBytes_AsString(bytes_object);
+
+    // `result' will be NULL, if any error happen.
+    return result;
+  }
+
   libtocc::FileInfoCollection* file_ids_to_info_collection(PyObject* ids_list)
   {
     // Copying the list to a FileInfoCollection.
@@ -47,23 +66,9 @@ namespace libtocc_python
 
     for (int i = 0; i < PyList_Size(ids_list); i++)
     {
-      PyObject* id_bytes = PyUnicode_AsEncodedString(
-                              PyList_GetItem(ids_list, i),
-                              "utf-8",
-                              "Could not encode file ID.");
-      if (id_bytes == NULL)
-      {
-        return NULL;
-      }
-      libtocc_python::PyObjectHolder id_bytes_holder(id_bytes);
-
-      char* id_str = PyBytes_AsString(id_bytes);
-      if (id_str == NULL)
-      {
-        return NULL;
-      }
-
-      libtocc::FileInfo file_info(id_str);
+      PyObject* item = PyList_GetItem(ids_list, i);
+      PyObjectHolder item_holder(item);
+      libtocc::FileInfo file_info(python_unicode_to_char(item));
       collection->add_file_info(file_info);
     }
 
@@ -78,22 +83,9 @@ namespace libtocc_python
 
     for (int i = 0; i < tags_size; i++)
     {
-      PyObject* tag_bytes = PyUnicode_AsEncodedString(
-                              PyList_GetItem(tags_list, i),
-                              "utf-8",
-                              "Could not encode tag.");
-      if (tag_bytes == NULL)
-      {
-        return NULL;
-      }
-      libtocc_python::PyObjectHolder tag_bytes_holder(tag_bytes);
-
-      char* tag_str = PyBytes_AsString(tag_bytes);
-      if (tag_str == NULL)
-      {
-        return NULL;
-      }
-      tags_collection->add_tag(tag_str);
+      PyObject* item = PyList_GetItem(tags_list, i);
+      PyObjectHolder item_holder(item);
+      tags_collection->add_tag(python_unicode_to_char(item));
     }
 
     return tags_collection;

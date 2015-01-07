@@ -32,16 +32,23 @@ extern "C"
 #include <libtocc/front_end/file_info.h>
 
 
-#define FILE_INFO_CREATE_NUM 0
-#define FILE_INFO_COLLECTION_CREATE_NUM 1
-#define FILE_INFO_API_POINTERS 2
+#define FILE_INFO_IS_NUM 0
+#define FILE_INFO_CREATE_NUM 1
+#define FILE_INFO_CREATE_LIST_NUM 2
+#define FILE_INFO_CREATE_FILE_IDS_NUM 3
+#define FILE_INFO_GET_NUM 4
+#define FILE_INFO_API_POINTERS 5
+
 
 #ifdef FILE_INFO_MODULE
 
 // This section is used when compiling file_info.cpp
-static PyObject* create_python_file_info(const libtocc::FileInfo& file_info);
+bool is_python_file_info(PyObject* object);
+PyObject* create_python_file_info(const libtocc::FileInfo& file_info);
 PyObject* create_python_file_info_list(
       libtocc::FileInfoCollection& file_info_collection);
+bool create_file_ids_array(PyObject* files_list, char** out_array);
+libtocc::FileInfo* python_file_info_get(PyObject* file_info);
 
 #else
 
@@ -51,10 +58,45 @@ extern "C"
 static void** FileInfoAPI;
 }
 
+/*
+ * Checks if the specified Python Object is a FileInfo.
+ */
+#define is_python_file_info \
+    (*(PyObject* (*)(PyObject* object)) FileInfoAPI[FILE_INFO_IS_NUM])
+
+/*
+ * Creates a Python Object from the specified FileInfo.
+ */
 #define create_python_file_info \
   (*(PyObject* (*)(const libtocc::FileInfo& file_info)) FileInfoAPI[FILE_INFO_CREATE_NUM])
+
+/*
+ * Creates a list of Python objects from the specified FileInfoCollection.
+ */
 #define create_python_file_info_list \
-  (*(PyObject* (*)(libtocc::FileInfoCollection& file_info_collection)) FileInfoAPI[FILE_INFO_COLLECTION_CREATE_NUM])
+  (*(PyObject* (*)(libtocc::FileInfoCollection& file_info_collection)) FileInfoAPI[FILE_INFO_CREATE_LIST_NUM])
+
+/*
+ * Creates a list of file IDs.
+ *
+ * @param files_list: can be a list of Strings, or a list of FileInfo, or a list
+ *   of both.
+ * @param out_array: Array to fill. This method allocates memory for
+ *   specified the pointer.
+ *
+ * @return: false if any errors happen.
+ *   It sets the Python Error if error happen.
+ */
+#define create_file_ids_array \
+  (*(bool (*)(PyObject* files_list, char** out_array)) FileInfoAPI[FILE_INFO_CREATE_FILE_IDS_NUM])
+
+/*
+ * Returns the internal pointer for the specified FileInfoObject.
+ * The pointer points to the libtocc::FileInfo kept inside the
+ * PyObject.
+ */
+#define python_file_info_get \
+  (*(libtocc::FileInfo* (*)(PyObject* file_info)) FileInfoAPI[FILE_INFO_GET_NUM])
 
 extern "C"
 {

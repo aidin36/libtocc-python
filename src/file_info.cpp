@@ -22,6 +22,8 @@
 #include "file_info.h"
 #include "utilities.h"
 
+#include <stdlib.h>
+
 
 /*
  * Defines a Python class, for the FileInfo.
@@ -218,6 +220,14 @@ static struct PyModuleDef file_info_module = {
 };
 
 /*
+ * Checks if the specified Python Object is a FileInfo.
+ */
+bool is_python_file_info(PyObject* object)
+{
+  return (Py_TYPE(object) == &FileInfoType);
+}
+
+/*
  * Creates a Python Object from the specified FileInfo.
  */
 PyObject* create_python_file_info(const libtocc::FileInfo& file_info)
@@ -265,6 +275,65 @@ PyObject* create_python_file_info_list(
 }
 
 /*
+ * Creates a list of file IDs.
+ *
+ * @param files_list: can be a list of Strings, or a list of FileInfo, or a list
+ *   of both.
+ * @param out_array: Array to fill. This method allocates memory for
+ *   specified the pointer.
+ *
+ * @return: false if any errors happen.
+ *   It sets the Python Error if error happen.
+ */
+bool create_file_ids_array(PyObject* files_list, char** out_array)
+{
+  //out_array = malloc(PyList_Size(files_list) * sizeof(char*));
+  out_array = new char*[PyList_Size(files_list)];
+
+  for (int i = 0; i < PyList_Size(files_list); i++)
+  {
+    PyObject* list_item = PyList_GetItem(files_list, i);
+
+    if (is_python_file_info(list_item))
+    {
+      out_array[i] = (char*)
+          ((FileInfoObject*)list_item)->file_info_instance->get_id();
+    }
+    else if (PyUnicode_Check(list_item))
+    {
+      out_array[i] = libtocc_python::python_unicode_to_char(list_item);
+    }
+    else
+    {
+      PyErr_Format(PyExc_TypeError,
+                   "The argument should be a list of str or FileInfo."
+                   "But something [%s] found!",
+                   Py_TYPE(list_item)->tp_name);
+      delete[] out_array;
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/*
+ * Returns the internal pointer for the specified FileInfoObject.
+ * The pointer points to the libtocc::FileInfo kept inside the
+ * PyObject.
+ */
+libtocc::FileInfo* python_file_info_get(PyObject* file_info)
+{
+  if (!is_python_file_info(file_info))
+  {
+    PyErr_SetString(PyExc_TypeError,
+        "Specified object is not a FileInfoObject.");
+  }
+
+  return ((FileInfoObject*)file_info)->file_info_instance;
+}
+
+/*
  * Module initialization func.
  */
 extern "C"
@@ -295,8 +364,11 @@ PyMODINIT_FUNC PyInit_file_info(void)
   // Creating C API and adding it to module.
 
   // API funcs.
+  FileInfoAPI[FILE_INFO_IS_NUM] = (void*)is_python_file_info;
   FileInfoAPI[FILE_INFO_CREATE_NUM] = (void*)create_python_file_info;
-  FileInfoAPI[FILE_INFO_COLLECTION_CREATE_NUM] = (void*)create_python_file_info_list;
+  FileInfoAPI[FILE_INFO_CREATE_LIST_NUM] = (void*)create_python_file_info_list;
+  FileInfoAPI[FILE_INFO_CREATE_FILE_IDS_NUM] = (void*)create_file_ids_array;
+  FileInfoAPI[FILE_INFO_GET_NUM] = (void*)python_file_info_get;
 
   // Capsule object.
   c_api_object = PyCapsule_New((void*)FileInfoAPI, "file_info._C_API", NULL);
